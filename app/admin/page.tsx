@@ -114,6 +114,7 @@ export default function AdminDashboard() {
                 longGoals={longGoals[m.id] ?? []}
                 monthGoals={monthGoals[m.id] ?? []}
                 painRecs={painRecs[m.id] ?? []}
+                onRefresh={fetchAll}
               />
             ))}
           </div>
