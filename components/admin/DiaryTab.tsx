@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Diary, PainRecord, EQUIP, BODY_PARTS, nc, nl, fmtD, nextDayAt10am } from '@/lib/utils';
+import { Diary, PainRecord, Comment, EQUIP, BODY_PARTS, nc, nl, fmtD, nextDayAt10am } from '@/lib/utils';
 
 type PainRow = { id: string; part: string; prev: number; curr: number };
 
@@ -16,6 +16,25 @@ export default function DiaryTab({
 }) {
   const [showModal, setShowModal] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [comments, setComments] = useState<Comment[]>([]);
+
+  useEffect(() => {
+    fetchComments();
+  }, [memberId]);
+
+  async function fetchComments() {
+    const { data } = await supabase
+      .from('comments')
+      .select('*')
+      .eq('member_id', memberId)
+      .order('created_at');
+    setComments(data ?? []);
+
+    // 읽지 않은 댓글 모두 읽음 처리
+    if (data && data.some((c: Comment) => !c.is_read)) {
+      await supabase.from('comments').update({ is_read: true }).eq('member_id', memberId).eq('is_read', false);
+    }
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -39,26 +58,32 @@ export default function DiaryTab({
         </div>
       )}
 
-      {diaries.map((d) => (
-        <DiaryCard key={d.id} diary={d} isOpen={openId === d.id} onToggle={() => setOpenId(openId === d.id ? null : d.id)} />
-      ))}
+      {diaries.map((d) => {
+        const dCmts = comments.filter((c) => c.diary_id === d.id);
+        return (
+          <DiaryCard
+            key={d.id}
+            diary={d}
+            comments={dCmts}
+            isOpen={openId === d.id}
+            onToggle={() => setOpenId(openId === d.id ? null : d.id)}
+          />
+        );
+      })}
 
       {showModal && (
         <DiaryModal
           memberId={memberId}
           painRecs={painRecs}
           onClose={() => setShowModal(false)}
-          onSaved={() => { setShowModal(false); onRefresh(); }}
+          onSaved={() => { setShowModal(false); onRefresh(); fetchComments(); }}
         />
       )}
     </div>
   );
 }
 
-// ──────────────────────────────────────────────
-// 일지 카드 (목록)
-// ──────────────────────────────────────────────
-function DiaryCard({ diary: d, isOpen, onToggle }: { diary: Diary; isOpen: boolean; onToggle: () => void }) {
+function DiaryCard({ diary: d, comments, isOpen, onToggle }: { diary: Diary; comments: Comment[]; isOpen: boolean; onToggle: () => void }) {
   return (
     <div style={{ background: '#fff', borderRadius: 20, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
       <button onClick={onToggle} style={{ width: '100%', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer' }}>
@@ -78,6 +103,7 @@ function DiaryCard({ diary: d, isOpen, onToggle }: { diary: Diary; isOpen: boole
                 </>
               );
             })()}
+            {comments.length > 0 && <Tag bg="#FFFBEB" color="#92400E">💬 피드백 {comments.length}개</Tag>}
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {d.equipment.map((e) => <Tag key={e} bg="#F3F4F6" color="#6B7280">{e}</Tag>)}
@@ -102,18 +128,17 @@ function DiaryCard({ diary: d, isOpen, onToggle }: { diary: Diary; isOpen: boole
                 const diff = p.prev_nrs - p.curr_nrs;
                 const cleared = p.curr_nrs === 0 && p.prev_nrs > 0;
                 const worse = p.curr_nrs > p.prev_nrs;
-                const same = p.curr_nrs === p.prev_nrs;
-                let badge = '개선 ↓', badgeColor = '#3182F6';
-                if (cleared) { badge = '소멸 ✨'; badgeColor = '#10B981'; }
-                else if (worse) { badge = '악화 ↑'; badgeColor = '#EF4444'; }
-                else if (same) { badge = '유지 →'; badgeColor = '#9CA3AF'; }
+                let badge = '개선 ↓', bc = '#3182F6';
+                if (cleared) { badge = '소멸 ✨'; bc = '#10B981'; }
+                else if (worse) { badge = '악화 ↑'; bc = '#EF4444'; }
+                else if (diff === 0) { badge = '유지 →'; bc = '#9CA3AF'; }
                 return (
                   <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #F3F4F6' }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#374151', flex: 1 }}>{p.body_part}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{p.body_part}</span>
                     <span style={{ fontSize: 13, fontWeight: 700, color: nc(p.prev_nrs) }}>{p.prev_nrs}</span>
                     <span style={{ color: '#D1D5DB', fontSize: 11 }}>→</span>
                     <span style={{ fontSize: 13, fontWeight: 700, color: nc(p.curr_nrs) }}>{p.curr_nrs}</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: badgeColor, background: `${badgeColor}18`, padding: '3px 9px', borderRadius: 20 }}>{badge}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: bc, background: `${bc}18`, padding: '3px 9px', borderRadius: 20 }}>{badge}</span>
                   </div>
                 );
               })}
@@ -145,6 +170,19 @@ function DiaryCard({ diary: d, isOpen, onToggle }: { diary: Diary; isOpen: boole
               </a>
             </div>
           )}
+
+          {/* 회원 피드백 표시 */}
+          {comments.length > 0 && (
+            <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 14, padding: '12px 16px' }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: '#92400E', marginBottom: 10 }}>💬 회원 피드백</p>
+              {comments.map((c) => (
+                <div key={c.id} style={{ background: '#fff', borderRadius: 10, padding: '10px 12px', marginBottom: 6 }}>
+                  <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.6 }}>{c.body}</p>
+                  <p style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>{new Date(c.created_at).toLocaleDateString('ko-KR')}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -171,17 +209,7 @@ function AccentBlock({ label, value, bg, border, color, labelColor }: { label: s
   );
 }
 
-// ──────────────────────────────────────────────
-// 일지 작성 모달
-// ──────────────────────────────────────────────
-function DiaryModal({
-  memberId, painRecs, onClose, onSaved,
-}: {
-  memberId: string;
-  painRecs: PainRecord[];
-  onClose: () => void;
-  onSaved: () => void;
-}) {
+function DiaryModal({ memberId, painRecs, onClose, onSaved }: { memberId: string; painRecs: PainRecord[]; onClose: () => void; onSaved: () => void }) {
   const [equip, setEquip] = useState<string[]>([]);
   const [purpose, setPurpose] = useState('');
   const [content, setContent] = useState('');
@@ -209,32 +237,21 @@ function DiaryModal({
     const today = new Date().toISOString().split('T')[0];
 
     const { data: diary, error } = await supabase.from('diaries').insert({
-      member_id: memberId,
-      session_date: today,
-      equipment: equip,
-      purpose: purpose.trim() || null,
-      content: content.trim(),
-      compensation: comp.trim() || null,
-      improvement: improv.trim() || null,
+      member_id: memberId, session_date: today, equipment: equip,
+      purpose: purpose.trim() || null, content: content.trim(),
+      compensation: comp.trim() || null, improvement: improv.trim() || null,
       homework: homework.trim() || null,
-      video_url: videoUrl.trim() || null,
-      video_title: videoTitle.trim() || null,
-      notify_at: withNotify ? nextDayAt10am() : null,
-      notify_sent: false,
+      video_url: videoUrl.trim() || null, video_title: videoTitle.trim() || null,
+      notify_at: withNotify ? nextDayAt10am() : null, notify_sent: false,
     }).select().single();
 
-    if (error || !diary) {
-      alert('저장 실패: ' + error?.message);
-      setSaving(false);
-      return;
-    }
+    if (error || !diary) { alert('저장 실패: ' + error?.message); setSaving(false); return; }
 
     const validRows = painRows.filter((r) => r.part);
     if (validRows.length > 0) {
       await supabase.from('diary_pain_changes').insert(
         validRows.map((r) => ({ diary_id: diary.id, body_part: r.part, prev_nrs: r.prev, curr_nrs: r.curr }))
       );
-      // 변화가 있는 부위는 pain_records에도 새 기록 추가
       const changed = validRows.filter((r) => r.curr !== r.prev);
       if (changed.length > 0) {
         await supabase.from('pain_records').insert(
@@ -276,7 +293,6 @@ function DiaryModal({
             <textarea value={improv} onChange={(e) => setImprov(e.target.value)} rows={2} placeholder="오늘 잘한 점" style={{ ...inputStyle, resize: 'none' }} />
           </Field>
 
-          {/* 통증 변화 */}
           <div style={{ background: '#F9FAFB', borderRadius: 16, padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <p style={{ fontSize: 13, fontWeight: 700 }}>📊 통증 변화</p>
@@ -285,31 +301,28 @@ function DiaryModal({
             {painRows.map((row) => (
               <PainRowEditor key={row.id} row={row} onChange={(patch) => updateRow(row.id, patch)} onRemove={() => removeRow(row.id)} />
             ))}
-            <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 6 }}>최근 통증 기록이 자동으로 불러와집니다</p>
           </div>
 
-          {/* 숙제 */}
           <div style={{ background: 'linear-gradient(135deg,#EFF6FF,#F5F3FF)', border: '1px solid #BFDBFE', borderRadius: 16, padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
               <span style={{ fontSize: 16 }}>📝</span>
-              <p style={{ fontSize: 13, fontWeight: 700 }}>숙제 <span style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 400 }}>(선택 — 입력 시에만 일지에 표시)</span></p>
+              <p style={{ fontSize: 13, fontWeight: 700 }}>숙제 <span style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 400 }}>(선택)</span></p>
             </div>
-            <textarea value={homework} onChange={(e) => setHomework(e.target.value)} rows={2} placeholder="예) 매일 아침 복횡근 활성화 10회, 고양이-소 스트레칭 10회" style={{ ...inputStyle, resize: 'none' }} />
+            <textarea value={homework} onChange={(e) => setHomework(e.target.value)} rows={2} placeholder="예) 매일 아침 복횡근 활성화 10회" style={{ ...inputStyle, resize: 'none' }} />
           </div>
 
-          {/* 영상 링크 */}
           <div style={{ background: 'linear-gradient(135deg,#F0FDF4,#ECFDF5)', border: '1px solid #A7F3D0', borderRadius: 16, padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
               <span style={{ fontSize: 16 }}>🎬</span>
-              <p style={{ fontSize: 13, fontWeight: 700 }}>영상 링크 <span style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 400 }}>(선택 — 입력 시에만 표시)</span></p>
+              <p style={{ fontSize: 13, fontWeight: 700 }}>영상 링크 <span style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 400 }}>(선택)</span></p>
             </div>
-            <input value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://youtube.com/... (동작 가이드 영상)" style={inputStyle} />
-            <input value={videoTitle} onChange={(e) => setVideoTitle(e.target.value)} placeholder="영상 제목 (예: 복횡근 활성화 가이드)" style={{ ...inputStyle, marginTop: 8 }} />
+            <input value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://youtube.com/..." style={inputStyle} />
+            <input value={videoTitle} onChange={(e) => setVideoTitle(e.target.value)} placeholder="영상 제목" style={{ ...inputStyle, marginTop: 8 }} />
           </div>
 
           <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 14, padding: '12px 16px' }}>
             <p style={{ fontSize: 12, fontWeight: 700, color: '#1E40AF' }}>🔔 발송 예약</p>
-            <p style={{ fontSize: 12, color: '#3B82F6', marginTop: 3 }}>발송 예약 저장 시 내일 오전 10시에 회원에게 일지 링크가 전송됩니다</p>
+            <p style={{ fontSize: 12, color: '#3B82F6', marginTop: 3 }}>내일 오전 10시에 회원에게 일지 링크가 전송됩니다</p>
           </div>
 
           <div style={{ display: 'flex', gap: 8 }}>
@@ -338,7 +351,7 @@ function PainRowEditor({ row, onChange, onRemove }: { row: PainRow; onChange: (p
           <option value="">통증 부위 선택</option>
           {BODY_PARTS.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
-        <button onClick={onRemove} style={{ padding: '6px 11px', background: '#FEF2F2', color: '#EF4444', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>삭제</button>
+        <button onClick={onRemove} style={{ padding: '6px 11px', background: '#FEF2F2', color: '#EF4444', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>삭제</button>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: '#6B7280' }}>이전 NRS</span>
