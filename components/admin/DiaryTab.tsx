@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Diary, PainRecord, Comment, EQUIP, BODY_PARTS, nc, nl, fmtD, nextDayAt10am } from '@/lib/utils';
+import { Diary, PainRecord, Comment, EQUIP, BODY_PARTS, nc, fmtD, nextDayAt10am } from '@/lib/utils';
 
 type PainRow = { id: string; part: string; prev: number; curr: number };
 
@@ -10,6 +10,7 @@ export default function DiaryTab({ memberId, diaries, painRecs, onRefresh }: {
   memberId: string; diaries: Diary[]; painRecs: PainRecord[]; onRefresh: () => void;
 }) {
   const [showModal, setShowModal] = useState(false);
+  const [editingDiary, setEditingDiary] = useState<Diary | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
 
@@ -23,12 +24,15 @@ export default function DiaryTab({ memberId, diaries, painRecs, onRefresh }: {
     }
   }
 
+  function openNew() { setEditingDiary(null); setShowModal(true); }
+  function openEdit(diary: Diary) { setEditingDiary(diary); setShowModal(true); }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <button onClick={() => setShowModal(true)} style={{ background: '#fff', borderRadius: 20, padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 14, border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
+      <button onClick={openNew} style={{ background: '#fff', borderRadius: 20, padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 14, border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
         <div style={{ width: 38, height: 38, borderRadius: 12, background: '#3182F6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 20, fontWeight: 700, flexShrink: 0 }}>+</div>
         <div>
-          <p style={{ fontSize: 15, fontWeight: 700 }}>오늘의 운동 일지 작성</p>
+          <p style={{ fontSize: 15, fontWeight: 700 }}>운동 일지 작성</p>
           <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>날짜 설정 · 숙제 · 영상 · 통증 변화</p>
         </div>
       </button>
@@ -42,18 +46,24 @@ export default function DiaryTab({ memberId, diaries, painRecs, onRefresh }: {
       {diaries.map((d) => {
         const dCmts = comments.filter((c) => c.diary_id === d.id);
         return (
-          <DiaryCard key={d.id} diary={d} comments={dCmts} isOpen={openId === d.id} onToggle={() => setOpenId(openId === d.id ? null : d.id)} />
+          <DiaryCard key={d.id} diary={d} comments={dCmts} isOpen={openId === d.id}
+            onToggle={() => setOpenId(openId === d.id ? null : d.id)}
+            onEdit={() => openEdit(d)} />
         );
       })}
 
       {showModal && (
-        <DiaryModal memberId={memberId} painRecs={painRecs} onClose={() => setShowModal(false)} onSaved={() => { setShowModal(false); onRefresh(); fetchComments(); }} />
+        <DiaryModal memberId={memberId} painRecs={painRecs} editing={editingDiary}
+          onClose={() => setShowModal(false)}
+          onSaved={() => { setShowModal(false); onRefresh(); fetchComments(); }} />
       )}
     </div>
   );
 }
 
-function DiaryCard({ diary: d, comments, isOpen, onToggle }: { diary: Diary; comments: Comment[]; isOpen: boolean; onToggle: () => void }) {
+function DiaryCard({ diary: d, comments, isOpen, onToggle, onEdit }: {
+  diary: Diary; comments: Comment[]; isOpen: boolean; onToggle: () => void; onEdit: () => void;
+}) {
   return (
     <div style={{ background: '#fff', borderRadius: 20, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
       <button onClick={onToggle} style={{ width: '100%', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer' }}>
@@ -71,7 +81,7 @@ function DiaryCard({ diary: d, comments, isOpen, onToggle }: { diary: Diary; com
                 {worsened > 0 && <Tag bg="#FEF2F2" color="#DC2626">↑악화 {worsened}</Tag>}
               </>);
             })()}
-            {comments.length > 0 && <Tag bg="#FFFBEB" color="#92400E">💬 피드백 {comments.length}개</Tag>}
+            {comments.length > 0 && <Tag bg="#FFFBEB" color="#92400E">💬 {comments.length}</Tag>}
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {d.equipment.map((e) => <Tag key={e} bg="#F3F4F6" color="#6B7280">{e}</Tag>)}
@@ -79,7 +89,13 @@ function DiaryCard({ diary: d, comments, isOpen, onToggle }: { diary: Diary; com
             {d.video_url && <Tag bg="#F0FDF4" color="#059669">🎬영상</Tag>}
           </div>
         </div>
-        <span style={{ color: '#C4C9D4', fontSize: 12, display: 'inline-block', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>▼</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={(e) => { e.stopPropagation(); onEdit(); }}
+            style={{ padding: '5px 10px', background: '#F3F4F6', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, color: '#6B7280', cursor: 'pointer' }}>
+            ✏️ 수정
+          </button>
+          <span style={{ color: '#C4C9D4', fontSize: 12, display: 'inline-block', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>▼</span>
+        </div>
       </button>
 
       {isOpen && (
@@ -115,20 +131,19 @@ function DiaryCard({ diary: d, comments, isOpen, onToggle }: { diary: Diary; com
 
           {d.homework && (
             <div style={{ background: 'linear-gradient(135deg,#EFF6FF,#F5F3FF)', border: '1px solid #BFDBFE', borderRadius: 16, padding: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}><span style={{ fontSize: 16 }}>📝</span><p style={{ fontSize: 13, fontWeight: 700 }}>이번 주 숙제</p></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}><span>📝</span><p style={{ fontSize: 13, fontWeight: 700 }}>이번 주 숙제</p></div>
               <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{d.homework}</p>
             </div>
           )}
           {d.video_url && (
             <div style={{ background: 'linear-gradient(135deg,#F0FDF4,#ECFDF5)', border: '1px solid #A7F3D0', borderRadius: 16, padding: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}><span style={{ fontSize: 16 }}>🎬</span><p style={{ fontSize: 13, fontWeight: 700 }}>참고 영상</p></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}><span>🎬</span><p style={{ fontSize: 13, fontWeight: 700 }}>참고 영상</p></div>
               <a href={d.video_url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: '#fff', borderRadius: 12, textDecoration: 'none', border: '1px solid #A7F3D0' }}>
                 <span style={{ fontSize: 20 }}>▶</span>
-                <div><p style={{ fontSize: 13, fontWeight: 700, color: '#059669' }}>{d.video_title || '영상 보기'}</p><p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>탭하여 영상 보기</p></div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: '#059669' }}>{d.video_title || '영상 보기'}</p>
               </a>
             </div>
           )}
-
           {comments.length > 0 && (
             <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 14, padding: '12px 16px' }}>
               <p style={{ fontSize: 12, fontWeight: 700, color: '#92400E', marginBottom: 10 }}>💬 회원 피드백</p>
@@ -156,21 +171,26 @@ function AccentBlock({ label, value, bg, border, color, labelColor }: { label: s
   return (<div style={{ background: bg, borderLeft: `3px solid ${border}`, borderRadius: '0 10px 10px 0', padding: '10px 14px' }}><p style={{ fontSize: 12, fontWeight: 700, color: labelColor, marginBottom: 4 }}>{label}</p><p style={{ fontSize: 13, color, lineHeight: 1.6 }}>{value}</p></div>);
 }
 
-// ─── 일지 작성 모달 ───
-function DiaryModal({ memberId, painRecs, onClose, onSaved }: { memberId: string; painRecs: PainRecord[]; onClose: () => void; onSaved: () => void }) {
-  const today = new Date().toISOString().split('T')[0];
-  const [sessionDate, setSessionDate] = useState(today); // 🆕 날짜 선택
-  const [equip, setEquip] = useState<string[]>([]);
-  const [purpose, setPurpose] = useState('');
-  const [content, setContent] = useState('');
-  const [comp, setComp] = useState('');
-  const [improv, setImprov] = useState('');
-  const [homework, setHomework] = useState('');
-  const [videoUrl, setVideoUrl] = useState('');
-  const [videoTitle, setVideoTitle] = useState('');
+function DiaryModal({ memberId, painRecs, editing, onClose, onSaved }: {
+  memberId: string; painRecs: PainRecord[]; editing: Diary | null; onClose: () => void; onSaved: () => void;
+}) {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const [sessionDate, setSessionDate] = useState(editing?.session_date ?? todayStr);
+  const [equip, setEquip] = useState<string[]>(editing?.equipment ?? []);
+  const [purpose, setPurpose] = useState(editing?.purpose ?? '');
+  const [content, setContent] = useState(editing?.content ?? '');
+  const [comp, setComp] = useState(editing?.compensation ?? '');
+  const [improv, setImprov] = useState(editing?.improvement ?? '');
+  const [homework, setHomework] = useState(editing?.homework ?? '');
+  const [videoUrl, setVideoUrl] = useState(editing?.video_url ?? '');
+  const [videoTitle, setVideoTitle] = useState(editing?.video_title ?? '');
   const [saving, setSaving] = useState(false);
+
   const latest = painRecs[painRecs.length - 1];
   const [painRows, setPainRows] = useState<PainRow[]>(() => {
+    if (editing?.pain_changes && editing.pain_changes.length > 0) {
+      return editing.pain_changes.map((p) => ({ id: 'r' + Math.random(), part: p.body_part, prev: p.prev_nrs, curr: p.curr_nrs }));
+    }
     if (latest) return latest.body_parts.map((pt) => ({ id: 'r' + Math.random(), part: pt, prev: latest.nrs_score, curr: latest.nrs_score }));
     return [{ id: 'r' + Math.random(), part: '', prev: 0, curr: 0 }];
   });
@@ -183,9 +203,8 @@ function DiaryModal({ memberId, painRecs, onClose, onSaved }: { memberId: string
   async function save(withNotify: boolean) {
     if (!content.trim()) { alert('수업 내용을 입력해주세요'); return; }
     setSaving(true);
-    const { data: diary, error } = await supabase.from('diaries').insert({
-      member_id: memberId,
-      session_date: sessionDate, // 🆕 선택한 날짜 사용
+    const diaryData = {
+      session_date: sessionDate,
       equipment: equip,
       purpose: purpose.trim() || null,
       content: content.trim(),
@@ -196,20 +215,29 @@ function DiaryModal({ memberId, painRecs, onClose, onSaved }: { memberId: string
       video_title: videoTitle.trim() || null,
       notify_at: withNotify ? nextDayAt10am() : null,
       notify_sent: false,
-    }).select().single();
+    };
 
-    if (error || !diary) { alert('저장 실패: ' + error?.message); setSaving(false); return; }
+    let diaryId: string;
+    if (editing) {
+      const { error } = await supabase.from('diaries').update(diaryData).eq('id', editing.id);
+      if (error) { alert('수정 실패: ' + error.message); setSaving(false); return; }
+      diaryId = editing.id;
+      await supabase.from('diary_pain_changes').delete().eq('diary_id', editing.id);
+    } else {
+      const { data: diary, error } = await supabase.from('diaries').insert({ member_id: memberId, ...diaryData }).select().single();
+      if (error || !diary) { alert('저장 실패: ' + error?.message); setSaving(false); return; }
+      diaryId = diary.id;
+    }
 
     const validRows = painRows.filter((r) => r.part);
     if (validRows.length > 0) {
-      await supabase.from('diary_pain_changes').insert(validRows.map((r) => ({ diary_id: diary.id, body_part: r.part, prev_nrs: r.prev, curr_nrs: r.curr })));
-      const changed = validRows.filter((r) => r.curr !== r.prev);
-      if (changed.length > 0) {
-        await supabase.from('pain_records').insert(changed.map((r) => ({ member_id: memberId, recorded_at: sessionDate, month: sessionDate.slice(0, 7), body_parts: [r.part], nrs_score: r.curr, memo: null, is_first: false })));
-      }
+      await supabase.from('diary_pain_changes').insert(
+        validRows.map((r) => ({ diary_id: diaryId, body_part: r.part, prev_nrs: r.prev, curr_nrs: r.curr }))
+      );
     }
+
     setSaving(false);
-    if (withNotify) setTimeout(() => alert('✅ 저장! 내일 오전 10시에 회원에게 알림이 발송됩니다.'), 100);
+    if (withNotify && !editing) setTimeout(() => alert('✅ 내일 오전 10시에 회원에게 알림이 발송됩니다.'), 100);
     onSaved();
   }
 
@@ -217,14 +245,14 @@ function DiaryModal({ memberId, painRecs, onClose, onSaved }: { memberId: string
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(17,24,39,.5)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
       <div style={{ background: '#fff', borderRadius: '24px 24px 0 0', width: '100%', maxWidth: 540, maxHeight: '92vh', overflowY: 'auto' }}>
         <div style={{ padding: '20px 24px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F3F4F6', position: 'sticky', top: 0, background: '#fff' }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700 }}>운동 일지 작성</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 700 }}>{editing ? '✏️ 운동 일지 수정' : '운동 일지 작성'}</h2>
           <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: '#F3F4F6', border: 'none', fontSize: 18, cursor: 'pointer' }}>×</button>
         </div>
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* 🆕 날짜 선택 */}
           <div>
             <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 6, display: 'block' }}>📅 수업 날짜</label>
-            <input type="date" value={sessionDate} onChange={(e) => setSessionDate(e.target.value)} style={{ width: '100%', padding: '12px 14px', background: '#F9FAFB', border: '1.5px solid #E5E7EB', borderRadius: 12, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+            <input type="date" value={sessionDate} onChange={(e) => setSessionDate(e.target.value)}
+              style={{ width: '100%', padding: '12px 14px', background: '#F9FAFB', border: '1.5px solid #E5E7EB', borderRadius: 12, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
           </div>
 
           <div>
@@ -236,16 +264,15 @@ function DiaryModal({ memberId, painRecs, onClose, onSaved }: { memberId: string
             </div>
           </div>
 
-          {[['운동 목적', purpose, setPurpose, '예) 코어 강화, 고관절 가동성 향상', false],
-            ['수업 내용 *', content, setContent, '오늘 진행한 운동 내용을 기록해주세요', true],
+          {([['운동 목적', purpose, setPurpose, '예) 코어 강화', false],
+            ['수업 내용 *', content, setContent, '오늘 진행한 운동 내용', true, 4],
             ['보상작용 / 주의점', comp, setComp, '관찰된 보상작용이나 주의사항', true],
-            ['잘한 점 🎉', improv, setImprov, '오늘 잘한 점', true]].map(([label, val, setter, ph, isTA]: any) => (
+            ['잘한 점 🎉', improv, setImprov, '오늘 잘한 점', true]] as any[]).map(([label, val, setter, ph, isTA, rows]) => (
             <div key={label}>
               <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 6, display: 'block' }}>{label}</label>
               {isTA
-                ? <textarea value={val} onChange={(e) => setter(e.target.value)} placeholder={ph} rows={label.includes('내용') ? 4 : 2} style={{ width: '100%', padding: '12px 14px', background: '#F9FAFB', border: '1.5px solid #E5E7EB', borderRadius: 12, fontSize: 13, outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
-                : <input value={val} onChange={(e) => setter(e.target.value)} placeholder={ph} style={{ width: '100%', padding: '12px 14px', background: '#F9FAFB', border: '1.5px solid #E5E7EB', borderRadius: 12, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
-              }
+                ? <textarea value={val} onChange={(e: any) => setter(e.target.value)} placeholder={ph} rows={rows ?? 2} style={{ width: '100%', padding: '12px 14px', background: '#F9FAFB', border: '1.5px solid #E5E7EB', borderRadius: 12, fontSize: 13, outline: 'none', resize: 'none', boxSizing: 'border-box' as any }} />
+                : <input value={val} onChange={(e: any) => setter(e.target.value)} placeholder={ph} style={{ width: '100%', padding: '12px 14px', background: '#F9FAFB', border: '1.5px solid #E5E7EB', borderRadius: 12, fontSize: 13, outline: 'none', boxSizing: 'border-box' as any }} />}
             </div>
           ))}
 
@@ -255,29 +282,35 @@ function DiaryModal({ memberId, painRecs, onClose, onSaved }: { memberId: string
               <button onClick={addRow} style={{ padding: '5px 12px', background: '#EFF6FF', color: '#3182F6', fontSize: 11, fontWeight: 700, borderRadius: 8, border: 'none', cursor: 'pointer' }}>+ 부위 추가</button>
             </div>
             {painRows.map((row) => <PainRowEditor key={row.id} row={row} onChange={(patch) => updateRow(row.id, patch)} onRemove={() => removeRow(row.id)} />)}
-            <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 6 }}>최근 통증 기록이 자동으로 불러와집니다</p>
           </div>
 
           <div style={{ background: 'linear-gradient(135deg,#EFF6FF,#F5F3FF)', border: '1px solid #BFDBFE', borderRadius: 16, padding: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}><span style={{ fontSize: 16 }}>📝</span><p style={{ fontSize: 13, fontWeight: 700 }}>숙제 <span style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 400 }}>(선택)</span></p></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}><span>📝</span><p style={{ fontSize: 13, fontWeight: 700 }}>숙제 <span style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 400 }}>(선택)</span></p></div>
             <textarea value={homework} onChange={(e) => setHomework(e.target.value)} rows={2} placeholder="예) 매일 아침 복횡근 활성화 10회" style={{ width: '100%', padding: '12px 14px', background: '#F9FAFB', border: '1.5px solid #E5E7EB', borderRadius: 12, fontSize: 13, outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
           </div>
 
           <div style={{ background: 'linear-gradient(135deg,#F0FDF4,#ECFDF5)', border: '1px solid #A7F3D0', borderRadius: 16, padding: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}><span style={{ fontSize: 16 }}>🎬</span><p style={{ fontSize: 13, fontWeight: 700 }}>영상 링크 <span style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 400 }}>(선택)</span></p></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}><span>🎬</span><p style={{ fontSize: 13, fontWeight: 700 }}>영상 링크 <span style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 400 }}>(선택)</span></p></div>
             <input value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://youtube.com/..." style={{ width: '100%', padding: '12px 14px', background: '#F9FAFB', border: '1.5px solid #E5E7EB', borderRadius: 12, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
             <input value={videoTitle} onChange={(e) => setVideoTitle(e.target.value)} placeholder="영상 제목" style={{ width: '100%', padding: '12px 14px', background: '#F9FAFB', border: '1.5px solid #E5E7EB', borderRadius: 12, fontSize: 13, outline: 'none', marginTop: 8, boxSizing: 'border-box' }} />
           </div>
 
-          <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 14, padding: '12px 16px' }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: '#1E40AF' }}>🔔 발송 예약</p>
-            <p style={{ fontSize: 12, color: '#3B82F6', marginTop: 3 }}>내일 오전 10시에 회원에게 일지 링크가 전송됩니다</p>
-          </div>
-
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => save(false)} disabled={saving} style={{ flex: 1, padding: 14, background: '#F3F4F6', color: '#374151', fontWeight: 700, fontSize: 14, borderRadius: 16, border: 'none', cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>저장</button>
-            <button onClick={() => save(true)} disabled={saving} style={{ flex: 1, padding: 14, background: '#3182F6', color: '#fff', fontWeight: 700, fontSize: 14, borderRadius: 16, border: 'none', cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>📅 발송 예약</button>
-          </div>
+          {editing ? (
+            <button onClick={() => save(false)} disabled={saving} style={{ width: '100%', padding: 14, background: '#3182F6', color: '#fff', fontWeight: 700, fontSize: 14, borderRadius: 16, border: 'none', cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+              {saving ? '저장 중...' : '✅ 수정 완료'}
+            </button>
+          ) : (
+            <>
+              <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 14, padding: '12px 16px' }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: '#1E40AF' }}>🔔 발송 예약</p>
+                <p style={{ fontSize: 12, color: '#3B82F6', marginTop: 3 }}>내일 오전 10시에 회원에게 일지 링크가 전송됩니다</p>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => save(false)} disabled={saving} style={{ flex: 1, padding: 14, background: '#F3F4F6', color: '#374151', fontWeight: 700, fontSize: 14, borderRadius: 16, border: 'none', cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>저장</button>
+                <button onClick={() => save(true)} disabled={saving} style={{ flex: 1, padding: 14, background: '#3182F6', color: '#fff', fontWeight: 700, fontSize: 14, borderRadius: 16, border: 'none', cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>📅 발송 예약</button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -301,8 +334,8 @@ function PainRowEditor({ row, onChange, onRemove }: { row: PainRow; onChange: (p
         </select>
         <button onClick={onRemove} style={{ padding: '6px 11px', background: '#FEF2F2', color: '#EF4444', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>삭제</button>
       </div>
-      {[['이전 NRS', row.prev, prevColor, (v: number) => onChange({ prev: v })],
-        ['현재 NRS', row.curr, currColor, (v: number) => onChange({ curr: v })]].map(([label, val, color, setter]: any) => (
+      {([['이전 NRS', row.prev, prevColor, (v: number) => onChange({ prev: v })],
+        ['현재 NRS', row.curr, currColor, (v: number) => onChange({ curr: v })]] as any[]).map(([label, val, color, setter]) => (
         <div key={label} style={{ marginBottom: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: '#6B7280' }}>{label}</span>
