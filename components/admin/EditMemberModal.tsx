@@ -1,92 +1,130 @@
 'use client';
 
 import { useState } from 'react';
+
+import type { Member } from '@/lib/utils';
+
 import { supabase } from '@/lib/supabase';
-import { Member } from '@/lib/utils';
 
-export default function EditMemberModal({ member, onClose, onSaved }: { member: Member; onClose: () => void; onSaved: () => void }) {
-  const [name, setName] = useState(member.name);
+interface Props {
+  member: Member;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+export default function EditMemberModal({ member, onClose, onSaved }: Props) {
+  const [name, setName] = useState(member.name || '');
   const [phone, setPhone] = useState(member.phone || '');
+  const [notifyChannel, setNotifyChannel] = useState(member.notify_channel || '카카오톡');
   const [notes, setNotes] = useState(member.notes || '');
-  const [channel, setChannel] = useState<'kakao' | 'sms'>(member.notify_channel);
-  const [isPregnant, setIsPregnant] = useState(member.is_pregnant);
+  const [isPregnant, setIsPregnant] = useState(!!member.is_pregnant);
   const [edd, setEdd] = useState(member.edd || '');
-  const [birthHosp, setBirthHosp] = useState(member.birth_hospital || '');
-  const [birthTel, setBirthTel] = useState(member.birth_hospital_tel || '');
-  const [guardTel, setGuardTel] = useState(member.guardian_tel || '');
+  // v6: 분만 대비 정보
+  const [birthHospital, setBirthHospital] = useState(member.birth_hospital || '');
+  const [birthHospitalTel, setBirthHospitalTel] = useState(member.birth_hospital_tel || '');
+  const [guardianTel, setGuardianTel] = useState(member.guardian_tel || '');
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
 
-  async function handleSave() {
-    if (!name.trim()) { setError('이름을 입력해주세요'); return; }
-    if (isPregnant && !edd) { setError('출산예정일을 입력해주세요'); return; }
+  const save = async () => {
+    if (!name.trim()) { alert('이름을 입력해주세요'); return; }
+    if (isPregnant && !edd) { alert('출산예정일을 입력해주세요'); return; }
     setSaving(true);
-    const { error: err } = await supabase.from('members').update({
+    const { error } = await supabase.from('members').update({
       name: name.trim(),
       phone: phone.trim() || null,
+      notify_channel: notifyChannel,
       notes: notes.trim() || null,
-      notify_channel: channel,
       is_pregnant: isPregnant,
-      edd: isPregnant ? edd : null,
-      birth_hospital: isPregnant ? birthHosp.trim() || null : null,
-      birth_hospital_tel: isPregnant ? birthTel.trim() || null : null,
-      guardian_tel: isPregnant ? guardTel.trim() || null : null,
+      edd: isPregnant && edd ? edd : null,
+      birth_hospital: isPregnant && birthHospital.trim() ? birthHospital.trim() : null,
+      birth_hospital_tel: isPregnant && birthHospitalTel.trim() ? birthHospitalTel.trim() : null,
+      guardian_tel: isPregnant && guardianTel.trim() ? guardianTel.trim() : null,
     }).eq('id', member.id);
     setSaving(false);
-    if (err) { setError(err.message); return; }
+    if (error) { alert('저장 실패: ' + error.message); return; }
     onSaved();
     onClose();
-  }
+  };
 
-  const inp: React.CSSProperties = { width: '100%', padding: '12px 14px', background: '#F9FAFB', border: '1.5px solid #E5E7EB', borderRadius: 12, fontSize: 13, outline: 'none', boxSizing: 'border-box' };
-  const lbl: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 6, display: 'block' };
+  const remove = async () => {
+    if (!confirm(`${member.name} 회원을 삭제할까요?\n관련 일지·통증·목표 기록이 함께 삭제될 수 있습니다.`)) return;
+    const { error } = await supabase.from('members').delete().eq('id', member.id);
+    if (error) { alert('삭제 실패: ' + error.message); return; }
+    onSaved();
+    onClose();
+  };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(17,24,39,.5)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
-      <div style={{ background: '#fff', borderRadius: '24px 24px 0 0', width: '100%', maxWidth: 540, maxHeight: '92vh', overflowY: 'auto' }}>
-        <div style={{ padding: '20px 24px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F3F4F6', position: 'sticky', top: 0, background: '#fff' }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700 }}>회원 정보 수정</h2>
-          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: '#F3F4F6', border: 'none', fontSize: 18, cursor: 'pointer' }}>×</button>
+    <div style={S.overlay} onClick={onClose}>
+      <div style={S.modal} onClick={(e) => e.stopPropagation()}>
+        <h2 style={S.title}>회원 정보 수정</h2>
+
+        <label style={S.label}>이름 *</label>
+        <input style={S.input} value={name} onChange={(e) => setName(e.target.value)} />
+
+        <label style={S.label}>연락처</label>
+        <input style={S.input} value={phone} onChange={(e) => setPhone(e.target.value)} />
+
+        <label style={S.label}>알림 채널</label>
+        <select style={S.input} value={notifyChannel} onChange={(e) => setNotifyChannel(e.target.value)}>
+          <option>카카오톡</option>
+          <option>문자</option>
+          <option>없음</option>
+        </select>
+
+        <label style={S.label}>메모</label>
+        <textarea style={{ ...S.input, minHeight: 60 }} value={notes} onChange={(e) => setNotes(e.target.value)} />
+
+        <div style={S.toggleRow} onClick={() => setIsPregnant(!isPregnant)}>
+          <span style={{ fontWeight: 600 }}>🤰 임산부 회원</span>
+          <div style={{ ...S.toggle, background: isPregnant ? '#F472B6' : '#D1D5DB' }}>
+            <div style={{ ...S.knob, transform: isPregnant ? 'translateX(20px)' : 'translateX(0)' }} />
+          </div>
         </div>
-        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div><label style={lbl}>이름 *</label><input value={name} onChange={e => setName(e.target.value)} style={inp} /></div>
-          <div><label style={lbl}>연락처</label><input value={phone} onChange={e => setPhone(e.target.value)} placeholder="010-0000-0000" style={inp} /></div>
-          <div><label style={lbl}>운동 목적</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} style={{ ...inp, resize: 'none' }} /></div>
 
-          <div>
-            <label style={lbl}>발송 채널</label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setChannel('kakao')} style={{ flex: 1, padding: 12, borderRadius: 14, border: `2px solid ${channel === 'kakao' ? '#FEE500' : '#E5E7EB'}`, background: channel === 'kakao' ? '#FFFDE7' : '#fff', fontWeight: 700, fontSize: 13, color: channel === 'kakao' ? '#856404' : '#9CA3AF', cursor: 'pointer' }}>💬 카카오톡</button>
-              <button onClick={() => setChannel('sms')} style={{ flex: 1, padding: 12, borderRadius: 14, border: `2px solid ${channel === 'sms' ? '#374151' : '#E5E7EB'}`, background: channel === 'sms' ? '#F9FAFB' : '#fff', fontWeight: 700, fontSize: 13, color: channel === 'sms' ? '#374151' : '#9CA3AF', cursor: 'pointer' }}>📱 문자(SMS)</button>
-            </div>
+        {isPregnant && (
+          <div style={S.pregBox}>
+            <label style={S.label}>출산예정일 *</label>
+            <input type="date" style={S.input} value={edd} onChange={(e) => setEdd(e.target.value)} />
+
+            <div style={S.pregDivider}>🏥 분만 대비 정보</div>
+
+            <label style={S.label}>분만 병원</label>
+            <input style={S.input} value={birthHospital} onChange={(e) => setBirthHospital(e.target.value)} placeholder="OO여성병원" />
+
+            <label style={S.label}>분만 병원 연락처</label>
+            <input style={S.input} value={birthHospitalTel} onChange={(e) => setBirthHospitalTel(e.target.value)} placeholder="02-000-0000" />
+
+            <label style={S.label}>보호자 연락처</label>
+            <input style={S.input} value={guardianTel} onChange={(e) => setGuardianTel(e.target.value)} placeholder="010-0000-0000" />
           </div>
+        )}
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#F9FAFB', borderRadius: 14, padding: '14px 16px' }}>
-            <div><p style={{ fontSize: 13, fontWeight: 700, marginBottom: 3 }}>임산부 회원</p><p style={{ fontSize: 12, color: '#9CA3AF' }}>임신 주수 자동 계산</p></div>
-            <button onClick={() => setIsPregnant(!isPregnant)} style={{ width: 48, height: 26, borderRadius: 13, border: 'none', background: isPregnant ? '#EC4899' : '#D1D5DB', position: 'relative', cursor: 'pointer', transition: 'background .2s' }}>
-              <span style={{ position: 'absolute', top: 3, left: isPregnant ? 25 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.2)', transition: 'left .2s' }} />
-            </button>
-          </div>
-
-          {isPregnant && (
-            <>
-              <div><label style={lbl}>출산예정일(EDD) *</label><input type="date" value={edd} onChange={e => setEdd(e.target.value)} style={inp} /></div>
-              <div style={{ background: '#FFF1F2', border: '1.5px solid #FECDD3', borderRadius: 14, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <p style={{ fontSize: 13, fontWeight: 800, color: '#BE123C' }}>🏥 분만 대비 긴급 정보</p>
-                <div><label style={lbl}>분만병원</label><input value={birthHosp} onChange={e => setBirthHosp(e.target.value)} placeholder="예) 강남세브란스 산부인과" style={inp} /></div>
-                <div><label style={lbl}>분만병원 연락처</label><input value={birthTel} onChange={e => setBirthTel(e.target.value)} placeholder="02-0000-0000" style={inp} /></div>
-                <div><label style={lbl}>보호자 연락처</label><input value={guardTel} onChange={e => setGuardTel(e.target.value)} placeholder="010-0000-0000" style={inp} /></div>
-              </div>
-            </>
-          )}
-
-          {error && <p style={{ fontSize: 13, color: '#EF4444', background: '#FEF2F2', padding: '8px 12px', borderRadius: 10 }}>{error}</p>}
-
-          <button onClick={handleSave} disabled={saving} style={{ width: '100%', padding: 14, background: '#3182F6', color: '#fff', fontWeight: 700, fontSize: 14, borderRadius: 16, border: 'none', cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
-            {saving ? '저장 중...' : '수정 완료'}
+        <div style={S.btnRow}>
+          <button style={S.delBtn} onClick={remove}>삭제</button>
+          <button style={S.cancelBtn} onClick={onClose}>취소</button>
+          <button style={S.saveBtn} onClick={save} disabled={saving}>
+            {saving ? '저장 중…' : '저장'}
           </button>
         </div>
       </div>
     </div>
   );
 }
+
+const S: Record<string, React.CSSProperties> = {
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16 },
+  modal: { background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto' },
+  title: { fontSize: 20, fontWeight: 700, marginBottom: 16 },
+  label: { display: 'block', fontSize: 13, fontWeight: 600, color: '#4B5563', marginBottom: 4, marginTop: 12 },
+  input: { width: '100%', padding: '10px 12px', border: '1px solid #D1D5DB', borderRadius: 8, fontSize: 15, boxSizing: 'border-box' },
+  toggleRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, padding: '10px 12px', background: '#FDF2F8', borderRadius: 10, cursor: 'pointer' },
+  toggle: { width: 44, height: 24, borderRadius: 12, position: 'relative', transition: 'background 0.2s' },
+  knob: { width: 20, height: 20, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: 2, transition: 'transform 0.2s' },
+  pregBox: { background: '#FDF2F8', borderRadius: 10, padding: '4px 12px 12px', marginTop: 8 },
+  pregDivider: { fontSize: 13, fontWeight: 700, color: '#BE185D', marginTop: 16, paddingTop: 12, borderTop: '1px dashed #F9A8D4' },
+  btnRow: { display: 'flex', gap: 8, marginTop: 20 },
+  delBtn: { flex: 1, padding: 12, borderRadius: 10, border: '1px solid #FCA5A5', background: '#FEF2F2', color: '#B91C1C', fontSize: 15, cursor: 'pointer' },
+  cancelBtn: { flex: 1, padding: 12, borderRadius: 10, border: '1px solid #D1D5DB', background: '#fff', fontSize: 15, cursor: 'pointer' },
+  saveBtn: { flex: 2, padding: 12, borderRadius: 10, border: 'none', background: '#111827', color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer' },
+};
