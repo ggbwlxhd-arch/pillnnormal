@@ -15,7 +15,7 @@ interface Props {
 export default function EditMemberModal({ member, onClose, onSaved }: Props) {
   const [name, setName] = useState(member.name || '');
   const [phone, setPhone] = useState(member.phone || '');
-  const [notifyChannel, setNotifyChannel] = useState(member.notify_channel || 'kakao');
+  const [notifyChannel, setNotifyChannel] = useState<string>(member.notify_channel || 'kakao');
   const [notes, setNotes] = useState(member.notes || '');
   const [isPregnant, setIsPregnant] = useState(!!member.is_pregnant);
   const [edd, setEdd] = useState(member.edd || '');
