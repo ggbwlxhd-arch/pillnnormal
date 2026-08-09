@@ -3,18 +3,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Member, Goal, PainRecord, Diary, Comment, nc, fmtD, curM, calcR, rc } from '@/lib/utils';
+import { Member, Goal, PainRecord, Diary, Comment, nc, fmtD, curM, calcR, rc, pregW } from '@/lib/utils';
 
 // 출산예정일(EDD)로 현재 임신 주수 계산 (숫자만 반환)
-function calcWeeks(edd: string): string | null {
-  const d = new Date(edd);
-  if (isNaN(d.getTime())) return null;
-  const daysToEdd = Math.round((d.getTime() - Date.now()) / 86400000);
-  const total = 280 - daysToEdd;
-  if (total < 0 || total > 320) return null;
-  const w = Math.floor(total / 7);
-  const dd = total % 7;
-  return dd === 0 ? `${w}주` : `${w}주 ${dd}일`;
+주` : `${w}주 ${dd}일`;
 }
 
 interface Notice {
@@ -93,7 +85,7 @@ export default function SharePage() {
   if (notFound) return <div style={{ padding: 60, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>페이지를 찾을 수 없습니다</div>;
   if (!member) return <div style={{ padding: 60, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>불러오는 중...</div>;
 
-  const weeks = member.is_pregnant && member.edd ? calcWeeks(member.edd) : null;
+  const pw = member.is_pregnant && member.edd ? pregW(member.edd) : null;
   const sub = (text: string) => text.replace(/이름님/g, `${member.name}님`);
   const lr = calcR(longGoals);
   const mr = calcR(monthGoals);
@@ -131,8 +123,8 @@ export default function SharePage() {
       {/* 헤더 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '10px 0 14px', flexWrap: 'wrap' }}>
         <h1 style={{ fontSize: 19, fontWeight: 800, margin: 0 }}>{member.name}님의 운동 기록</h1>
-        {member.is_pregnant && weeks !== null && (
-          <span style={{ fontSize: 12, background: '#FCE7F3', color: '#BE185D', padding: '3px 10px', borderRadius: 999, fontWeight: 700 }}>🤰 임신 {weeks}</span>
+        {member.is_pregnant && pw && (
+          <span style={{ fontSize: 12, background: '#FCE7F3', color: '#BE185D', padding: '3px 10px', borderRadius: 999, fontWeight: 700 }}>🤰 {pw.lbl}</span>
         )}
       </div>
 
