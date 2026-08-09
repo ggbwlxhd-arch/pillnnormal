@@ -6,12 +6,15 @@ import { supabase } from '@/lib/supabase';
 import { Member, Goal, PainRecord, Diary, Comment, nc, fmtD, curM, calcR, rc } from '@/lib/utils';
 
 // 출산예정일(EDD)로 현재 임신 주수 계산 (숫자만 반환)
-function calcWeeks(edd: string): number | null {
+function calcWeeks(edd: string): string | null {
   const d = new Date(edd);
   if (isNaN(d.getTime())) return null;
   const daysToEdd = Math.round((d.getTime() - Date.now()) / 86400000);
-  const w = Math.floor((280 - daysToEdd) / 7);
-  return w >= 0 && w <= 45 ? w : null;
+  const total = 280 - daysToEdd;
+  if (total < 0 || total > 320) return null;
+  const w = Math.floor(total / 7);
+  const dd = total % 7;
+  return dd === 0 ? `${w}주` : `${w}주 ${dd}일`;
 }
 
 interface Notice {
@@ -129,7 +132,7 @@ export default function SharePage() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '10px 0 14px', flexWrap: 'wrap' }}>
         <h1 style={{ fontSize: 19, fontWeight: 800, margin: 0 }}>{member.name}님의 운동 기록</h1>
         {member.is_pregnant && weeks !== null && (
-          <span style={{ fontSize: 12, background: '#FCE7F3', color: '#BE185D', padding: '3px 10px', borderRadius: 999, fontWeight: 700 }}>🤰 임신 {weeks}주</span>
+          <span style={{ fontSize: 12, background: '#FCE7F3', color: '#BE185D', padding: '3px 10px', borderRadius: 999, fontWeight: 700 }}>🤰 임신 {weeks}</span>
         )}
       </div>
 
