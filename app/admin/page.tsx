@@ -3,20 +3,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Member } from '@/lib/utils';
+import { Member, Goal, PainRecord, curM } from '@/lib/utils';
+import MemberCard from '@/components/admin/MemberCard';
 import AddMemberModal from '@/components/admin/AddMemberModal';
-
-// 출산예정일(EDD)로 현재 임신 주수 계산
-function calcWeeks(edd: string): string | null {
-  const d = new Date(edd);
-  if (isNaN(d.getTime())) return null;
-  const daysToEdd = Math.round((d.getTime() - Date.now()) / 86400000);
-  const total = 280 - daysToEdd;
-  if (total < 0 || total > 320) return null;
-  const w = Math.floor(total / 7);
-  const dd = total % 7;
-  return dd === 0 ? `${w}주` : `${w}주 ${dd}일`;
-}
 import NoticeManager from '@/components/admin/NoticeManager';
 
 interface UnreadComment {
@@ -30,32 +19,44 @@ interface UnreadComment {
 export default function AdminPage() {
   const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
+  const [longGoalsMap, setLongGoalsMap] = useState<Record<string, Goal[]>>({});
+  const [monthGoalsMap, setMonthGoalsMap] = useState<Record<string, Goal[]>>({});
+  const [painMap, setPainMap] = useState<Record<string, PainRecord[]>>({});
   const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [showNotices, setShowNotices] = useState(false);
   const [unread, setUnread] = useState<UnreadComment[]>([]);
   const [showFeedback, setShowFeedback] = useState(false);
 
-  const loadMembers = useCallback(async () => {
-    const { data } = await supabase.from('members').select('*');
+  const loadAll = useCallback(async () => {
+    const [m, lg, mg, p, c] = await Promise.all([
+      supabase.from('members').select('*'),
+      supabase.from('long_term_goals').select('*').order('sort_order'),
+      supabase.from('monthly_goals').select('*').eq('month', curM()).order('sort_order'),
+      supabase.from('pain_records').select('*').order('recorded_at'),
+      supabase.from('comments').select('id, member_id, diary_id, body, created_at').eq('is_read', false).order('created_at', { ascending: false }),
+    ]);
+
     // 가나다순 정렬
-    const sorted = (data ?? []).sort((a: Member, b: Member) => a.name.localeCompare(b.name, 'ko'));
+    const sorted = (m.data ?? []).sort((a: Member, b: Member) => a.name.localeCompare(b.name, 'ko'));
     setMembers(sorted);
+
+    const lgMap: Record<string, Goal[]> = {};
+    (lg.data ?? []).forEach((g: Goal & { member_id: string }) => { (lgMap[g.member_id] ??= []).push(g); });
+    setLongGoalsMap(lgMap);
+
+    const mgMap: Record<string, Goal[]> = {};
+    (mg.data ?? []).forEach((g: Goal & { member_id: string }) => { (mgMap[g.member_id] ??= []).push(g); });
+    setMonthGoalsMap(mgMap);
+
+    const pMap: Record<string, PainRecord[]> = {};
+    (p.data ?? []).forEach((r: PainRecord & { member_id: string }) => { (pMap[r.member_id] ??= []).push(r); });
+    setPainMap(pMap);
+
+    setUnread(c.data ?? []);
   }, []);
 
-  const loadUnread = useCallback(async () => {
-    const { data } = await supabase
-      .from('comments')
-      .select('id, member_id, diary_id, body, created_at')
-      .eq('is_read', false)
-      .order('created_at', { ascending: false });
-    setUnread(data ?? []);
-  }, []);
-
-  useEffect(() => {
-    loadMembers();
-    loadUnread();
-  }, [loadMembers, loadUnread]);
+  useEffect(() => { loadAll(); }, [loadAll]);
 
   const memberName = (mid: string) => members.find((m) => m.id === mid)?.name ?? '회원';
 
@@ -116,31 +117,18 @@ export default function AdminPage() {
         style={{ width: '100%', padding: '13px 16px', border: 'none', borderRadius: 14, fontSize: 14, boxSizing: 'border-box', marginBottom: 14, outline: 'none', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}
       />
 
-      {/* 회원 목록 (가나다순) */}
+      {/* 회원 목록 (가나다순, 원래 MemberCard) */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {filtered.map((m) => {
-          const w = m.is_pregnant && m.edd ? calcWeeks(m.edd) : null;
-          return (
-            <button key={m.id} onClick={() => router.push(`/admin/members/${m.id}`)}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', background: '#fff', border: 'none', borderRadius: 20, padding: '16px 18px', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
-              <div style={{ width: 42, height: 42, borderRadius: 14, background: m.is_pregnant ? '#FCE7F3' : '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, flexShrink: 0 }}>
-                {m.is_pregnant ? '🤰' : '🧘'}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>{m.name}</span>
-                  {m.is_pregnant && (
-                    <span style={{ fontSize: 11, background: '#FCE7F3', color: '#BE185D', padding: '2px 8px', borderRadius: 999, fontWeight: 700 }}>
-                      {w !== null ? `임신 ${w}` : '임산부'}
-                    </span>
-                  )}
-                </div>
-                {m.phone && <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 3 }}>{m.phone}</p>}
-              </div>
-              <span style={{ color: '#C4C9D4', fontSize: 14 }}>›</span>
-            </button>
-          );
-        })}
+        {filtered.map((m) => (
+          <MemberCard
+            key={m.id}
+            member={m}
+            longGoals={longGoalsMap[m.id] ?? []}
+            monthGoals={monthGoalsMap[m.id] ?? []}
+            painRecs={painMap[m.id] ?? []}
+            onRefresh={loadAll}
+          />
+        ))}
         {filtered.length === 0 && (
           <div style={{ background: '#fff', borderRadius: 20, padding: 40, textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
             <p style={{ fontSize: 13, color: '#9CA3AF' }}>{search ? '검색 결과가 없습니다' : '회원을 등록해보세요!'}</p>
@@ -148,7 +136,7 @@ export default function AdminPage() {
         )}
       </div>
 
-      {showAdd && <AddMemberModal onClose={() => setShowAdd(false)} onSaved={loadMembers} />}
+      {showAdd && <AddMemberModal onClose={() => setShowAdd(false)} onSaved={loadAll} />}
       {showNotices && <NoticeManager members={members} onClose={() => setShowNotices(false)} />}
     </div>
   );
