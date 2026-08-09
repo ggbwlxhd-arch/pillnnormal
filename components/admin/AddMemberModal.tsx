@@ -27,7 +27,7 @@ export default function AddMemberModal({ onClose, onSaved }: Props) {
     if (!name.trim()) { alert('이름을 입력해주세요'); return; }
     if (isPregnant && !edd) { alert('출산예정일을 입력해주세요'); return; }
     setSaving(true);
-    const token = crypto.randomUUID().replace(/-/g, '');
+    const token = crypto.randomUUID();
     const { error } = await supabase.from('members').insert({
       name: name.trim(),
       phone: phone.trim() || null,
