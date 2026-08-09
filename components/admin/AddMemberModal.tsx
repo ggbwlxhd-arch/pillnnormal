@@ -13,7 +13,7 @@ interface Props {
 export default function AddMemberModal({ onClose, onSaved }: Props) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [notifyChannel, setNotifyChannel] = useState('카카오톡');
+  const [notifyChannel, setNotifyChannel] = useState('kakao');
   const [notes, setNotes] = useState('');
   const [isPregnant, setIsPregnant] = useState(false);
   const [edd, setEdd] = useState('');
@@ -59,9 +59,9 @@ export default function AddMemberModal({ onClose, onSaved }: Props) {
 
         <label style={S.label}>알림 채널</label>
         <select style={S.input} value={notifyChannel} onChange={(e) => setNotifyChannel(e.target.value)}>
-          <option>카카오톡</option>
-          <option>문자</option>
-          <option>없음</option>
+          <option value="kakao">카카오톡</option>
+          <option value="sms">문자</option>
+          <option value="none">알림 안 함</option>
         </select>
 
         <label style={S.label}>메모</label>
