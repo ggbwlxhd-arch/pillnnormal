@@ -3,7 +3,16 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Member, Goal, PainRecord, Diary, Comment, nc, fmtD, curM, pregW, calcR, rc } from '@/lib/utils';
+import { Member, Goal, PainRecord, Diary, Comment, nc, fmtD, curM, calcR, rc } from '@/lib/utils';
+
+// 출산예정일(EDD)로 현재 임신 주수 계산 (숫자만 반환)
+function calcWeeks(edd: string): number | null {
+  const d = new Date(edd);
+  if (isNaN(d.getTime())) return null;
+  const daysToEdd = Math.round((d.getTime() - Date.now()) / 86400000);
+  const w = Math.floor((280 - daysToEdd) / 7);
+  return w >= 0 && w <= 45 ? w : null;
+}
 
 interface Notice {
   id: string;
@@ -81,7 +90,7 @@ export default function SharePage() {
   if (notFound) return <div style={{ padding: 60, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>페이지를 찾을 수 없습니다</div>;
   if (!member) return <div style={{ padding: 60, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>불러오는 중...</div>;
 
-  const weeks = member.is_pregnant && member.edd ? pregW(member.edd) : null;
+  const weeks = member.is_pregnant && member.edd ? calcWeeks(member.edd) : null;
   const sub = (text: string) => text.replace(/이름님/g, `${member.name}님`);
   const lr = calcR(longGoals);
   const mr = calcR(monthGoals);
