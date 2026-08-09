@@ -3,7 +3,16 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Member, Goal, PainRecord, Diary, curM, pregW } from '@/lib/utils';
+import { Member, Goal, PainRecord, Diary, curM } from '@/lib/utils';
+
+// 출산예정일(EDD)로 현재 임신 주수 계산 (숫자만 반환)
+function calcWeeks(edd: string): number | null {
+  const d = new Date(edd);
+  if (isNaN(d.getTime())) return null;
+  const daysToEdd = Math.round((d.getTime() - Date.now()) / 86400000);
+  const w = Math.floor((280 - daysToEdd) / 7);
+  return w >= 0 && w <= 45 ? w : null;
+}
 import EditMemberModal from '@/components/admin/EditMemberModal';
 import GoalsTab from '@/components/admin/GoalsTab';
 import DiaryTab from '@/components/admin/DiaryTab';
@@ -73,7 +82,7 @@ export default function MemberDetailPage() {
 
   if (!member) return <div style={{ padding: 40, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>불러오는 중...</div>;
 
-  const weeks = member.is_pregnant && member.edd ? pregW(member.edd) : null;
+  const weeks = member.is_pregnant && member.edd ? calcWeeks(member.edd) : null;
   const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/diary/${member.share_token}` : '';
 
   return (
