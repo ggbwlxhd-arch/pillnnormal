@@ -7,12 +7,15 @@ import { Member } from '@/lib/utils';
 import AddMemberModal from '@/components/admin/AddMemberModal';
 
 // 출산예정일(EDD)로 현재 임신 주수 계산
-function calcWeeks(edd: string): number | null {
+function calcWeeks(edd: string): string | null {
   const d = new Date(edd);
   if (isNaN(d.getTime())) return null;
   const daysToEdd = Math.round((d.getTime() - Date.now()) / 86400000);
-  const w = Math.floor((280 - daysToEdd) / 7);
-  return w >= 0 && w <= 45 ? w : null;
+  const total = 280 - daysToEdd;
+  if (total < 0 || total > 320) return null;
+  const w = Math.floor(total / 7);
+  const dd = total % 7;
+  return dd === 0 ? `${w}주` : `${w}주 ${dd}일`;
 }
 import NoticeManager from '@/components/admin/NoticeManager';
 
@@ -79,7 +82,7 @@ export default function AdminPage() {
               )}
             </button>
             {showFeedback && (
-              <div style={{ position: 'absolute', top: '115%', right: 0, background: '#fff', borderRadius: 16, boxShadow: '0 8px 24px rgba(0,0,0,.12)', width: 280, maxHeight: 320, overflowY: 'auto', zIndex: 50 }}>
+              <div style={{ position: 'fixed', top: 64, left: 12, right: 12, maxWidth: 420, margin: '0 auto', background: '#fff', borderRadius: 16, boxShadow: '0 8px 24px rgba(0,0,0,.18)', maxHeight: 340, overflowY: 'auto', zIndex: 50 }}>
                 {unread.length === 0 && <p style={{ padding: 16, fontSize: 12, color: '#9CA3AF', textAlign: 'center' }}>새 피드백이 없습니다</p>}
                 {unread.map((c) => (
                   <button key={c.id} onClick={() => goToFeedback(c)}
@@ -128,7 +131,7 @@ export default function AdminPage() {
                   <span style={{ fontSize: 15, fontWeight: 700 }}>{m.name}</span>
                   {m.is_pregnant && (
                     <span style={{ fontSize: 11, background: '#FCE7F3', color: '#BE185D', padding: '2px 8px', borderRadius: 999, fontWeight: 700 }}>
-                      {w !== null ? `임신 ${w}주` : '임산부'}
+                      {w !== null ? `임신 ${w}` : '임산부'}
                     </span>
                   )}
                 </div>
