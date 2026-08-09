@@ -5,10 +5,6 @@ import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Member, Goal, PainRecord, Diary, Comment, nc, fmtD, curM, calcR, rc, pregW } from '@/lib/utils';
 
-// 출산예정일(EDD)로 현재 임신 주수 계산 (숫자만 반환)
-주` : `${w}주 ${dd}일`;
-}
-
 interface Notice {
   id: string;
   title: string;
