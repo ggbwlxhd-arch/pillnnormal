@@ -4,8 +4,16 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Member } from '@/lib/utils';
-import MemberCard from '@/components/admin/MemberCard';
 import AddMemberModal from '@/components/admin/AddMemberModal';
+
+// 출산예정일(EDD)로 현재 임신 주수 계산
+function calcWeeks(edd: string): number | null {
+  const d = new Date(edd);
+  if (isNaN(d.getTime())) return null;
+  const daysToEdd = Math.round((d.getTime() - Date.now()) / 86400000);
+  const w = Math.floor((280 - daysToEdd) / 7);
+  return w >= 0 && w <= 45 ? w : null;
+}
 import NoticeManager from '@/components/admin/NoticeManager';
 
 interface UnreadComment {
@@ -107,9 +115,29 @@ export default function AdminPage() {
 
       {/* 회원 목록 (가나다순) */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {filtered.map((m) => (
-          <MemberCard key={m.id} member={m} onClick={() => router.push(`/admin/members/${m.id}`)} />
-        ))}
+        {filtered.map((m) => {
+          const w = m.is_pregnant && m.edd ? calcWeeks(m.edd) : null;
+          return (
+            <button key={m.id} onClick={() => router.push(`/admin/members/${m.id}`)}
+              style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', background: '#fff', border: 'none', borderRadius: 20, padding: '16px 18px', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
+              <div style={{ width: 42, height: 42, borderRadius: 14, background: m.is_pregnant ? '#FCE7F3' : '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, flexShrink: 0 }}>
+                {m.is_pregnant ? '🤰' : '🧘'}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>{m.name}</span>
+                  {m.is_pregnant && (
+                    <span style={{ fontSize: 11, background: '#FCE7F3', color: '#BE185D', padding: '2px 8px', borderRadius: 999, fontWeight: 700 }}>
+                      {w !== null ? `임신 ${w}주` : '임산부'}
+                    </span>
+                  )}
+                </div>
+                {m.phone && <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 3 }}>{m.phone}</p>}
+              </div>
+              <span style={{ color: '#C4C9D4', fontSize: 14 }}>›</span>
+            </button>
+          );
+        })}
         {filtered.length === 0 && (
           <div style={{ background: '#fff', borderRadius: 20, padding: 40, textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
             <p style={{ fontSize: 13, color: '#9CA3AF' }}>{search ? '검색 결과가 없습니다' : '회원을 등록해보세요!'}</p>
